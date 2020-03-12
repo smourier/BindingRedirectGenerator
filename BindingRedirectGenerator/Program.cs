@@ -103,6 +103,12 @@ namespace BindingRedirectGenerator
                 if (asm == null) // not .NET, not valid, etc.
                     continue;
 
+                if (asm.Name.PublicKeyToken == null || asm.Name.PublicKeyToken.Length == 0) // no strong name
+                {
+                    Console.WriteLine("Skipping '" + file + "': No public key token.");
+                    continue;
+                }
+
                 var pkt = string.Join(string.Empty, asm.Name.PublicKeyToken.Select(i => i.ToString("x2")));
                 Func<XElement, bool> cultureFunc;
                 if (string.IsNullOrEmpty(asm.Name.Culture))
@@ -153,11 +159,13 @@ namespace BindingRedirectGenerator
                 using var stream = File.OpenRead(path);
                 return AssemblyDefinition.ReadAssembly(path);
             }
+#pragma warning disable CA1031 // Do not catch general exception types
             catch (Exception e)
             {
                 Console.WriteLine("Skipping '" + path + "': " + e.Message);
                 return null;
             }
+#pragma warning restore CA1031 // Do not catch general exception types
         }
 
         static void Help()
