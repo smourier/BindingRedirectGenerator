@@ -16,6 +16,10 @@ namespace BindingRedirectGenerator
         /// <summary> Xml Namespace </summary>
         public const string ns = "urn:schemas-microsoft-com:asm.v1";
 
+        public const string AttribCulture = "culture";
+        public const string AttribName = "name";
+        public const string AttribPublicKeyToken = "publicKeyToken";
+
         public static readonly XName NameDependentAssembly = XName.Get("dependentAssembly", ns);
         public static readonly XName NameAssemblyIdentity = XName.Get("assemblyIdentity", ns);
         public static readonly XName NameBindingRedirect = XName.Get("bindingRedirect", ns);
@@ -47,7 +51,7 @@ namespace BindingRedirectGenerator
         }
 
         /// <summary> Rewrites binding Redirects in the <paramref name="configFile"/> for all Assemblies (DLLs and EXEs) in the <paramref name="searchDirectory"/> </summary>
-        public static void ReWriteBindingRedirects(FileInfo configFile, DirectoryInfo? searchDirectory = null)
+        public static void ReWriteBindingRedirects(this FileInfo configFile, DirectoryInfo? searchDirectory = null)
         {
             var doc = configFile.Exists ? XDocument.Load(configFile.FullName) : new XDocument();
 
@@ -80,17 +84,17 @@ namespace BindingRedirectGenerator
                 Func<XElement, bool> cultureFunc;
                 if (string.IsNullOrEmpty(asm.Name.Culture))
                 {
-                    cultureFunc = i => i.Attribute("culture") == null || i.Attribute("culture")?.Value == "neutral";
+                    cultureFunc = i => i.Attribute(AttribCulture) == null || i.Attribute(AttribCulture)?.Value == "neutral";
                 }
                 else
                 {
-                    cultureFunc = i => i.Attribute("culture")?.Value == asm.Name.Culture;
+                    cultureFunc = i => i.Attribute(AttribCulture)?.Value == asm.Name.Culture;
                 }
 
                 var dependentAssembly = assemblyBinding
                     .Descendants(NameDependentAssembly)
                     .Descendants(NameAssemblyIdentity)
-                    .FirstOrDefault(i => i.Attribute("name")?.Value == asm.Name.Name && i.Attribute("publicKeyToken")?.Value == pkt && cultureFunc(i))?
+                    .FirstOrDefault(i => i.Attribute(AttribName)?.Value == asm.Name.Name && i.Attribute(AttribPublicKeyToken)?.Value == pkt && cultureFunc(i))?
                     .Parent;
                 if (dependentAssembly != null)
                 {
@@ -103,11 +107,11 @@ namespace BindingRedirectGenerator
 
                 var assemblyIdentity = new XElement(NameAssemblyIdentity);
                 dependentAssembly.Add(assemblyIdentity);
-                assemblyIdentity.SetAttributeValue("name", asm.Name.Name);
-                assemblyIdentity.SetAttributeValue("publicKeyToken", pkt);
+                assemblyIdentity.SetAttributeValue(AttribName, asm.Name.Name);
+                assemblyIdentity.SetAttributeValue(AttribPublicKeyToken, pkt);
                 if (!string.IsNullOrEmpty(asm.Name.Culture))
                 {
-                    assemblyIdentity.SetAttributeValue("culture", asm.Name.Culture);
+                    assemblyIdentity.SetAttributeValue(AttribCulture, asm.Name.Culture);
                 }
 
                 var bindingRedirect = new XElement(NameBindingRedirect);
