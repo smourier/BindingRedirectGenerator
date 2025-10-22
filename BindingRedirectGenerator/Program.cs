@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -61,7 +62,7 @@ namespace BindingRedirectGenerator
                 if (!".dll".EqualsIgnoreCase(ext) && 
                     !".exe".EqualsIgnoreCase(ext))
                 {
-                    Console.WriteLine("Ignoring: " + file);
+                    Trace.TraceInformation("Ignoring: " + file);
                     continue;
                 }
 
@@ -92,7 +93,10 @@ namespace BindingRedirectGenerator
                     .FirstOrDefault(i => i.Attribute("name")?.Value == asm.Name.Name && i.Attribute("publicKeyToken")?.Value == pkt && cultureFunc(i))?
                     .Parent;
                 if (dependentAssembly != null)
+                {
+                    Console.WriteLine("Ignoring '" + file + "' Binding Redirect already exists");
                     continue;
+                }
 
                 dependentAssembly = new XElement(NameDependentAssembly);
                 assemblyBinding.Add(dependentAssembly);
@@ -138,7 +142,7 @@ namespace BindingRedirectGenerator
             }
             catch (Exception e)
             {
-                Console.Error.WriteLine("Skipping '" + path + "': " + e.Message);
+                Console.Error.WriteLine("Error reading '" + path + "': " + e.Message);
                 return null;
             }
         }
