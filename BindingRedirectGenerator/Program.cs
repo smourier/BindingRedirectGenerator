@@ -1,103 +1,69 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Xml.Linq;
 using BindingRedirectGenerator.Utilities;
-using Mono.Cecil; // we use cecil because System.Reflection.MetaData crashes...
+using Mono.Cecil;
+
+// we use cecil because System.Reflection.MetaData crashes...
 
 namespace BindingRedirectGenerator
 {
-    class Program
+    public static class Program
     {
-        static void Main(string[] args)
-        {
-            if (Debugger.IsAttached)
-            {
-                SafeMain(args);
-                return;
-            }
+        /// <summary> Xml Namespace </summary>
+        public const string ns = "urn:schemas-microsoft-com:asm.v1";
 
+        public static readonly XName NameDependentAssembly = XName.Get("dependentAssembly", ns);
+        public static readonly XName NameAssemblyIdentity = XName.Get("assemblyIdentity", ns);
+        public static readonly XName NameBindingRedirect = XName.Get("bindingRedirect", ns);
+
+        /// <inheritdoc cref="ReWriteBindingRedirects"/>
+        public static void Main(string[] args)
+        {
             try
             {
-                SafeMain(args);
+                if (args.Length < 1) {
+                    AssemblyName entryAssembly = Assembly.GetEntryAssembly()!.GetName();
+                    Console.WriteLine(entryAssembly.Name + " <config file path> [<search directory path>]");
+                    return;
+                }
+
+                var outputFilePath = new FileInfo(Path.GetFullPath(args[0]));
+                var inputDirectoryPath = args.Length > 1 ? new DirectoryInfo(args[1]) : null;
+
+                Console.WriteLine("Input       : " + inputDirectoryPath);
+                Console.WriteLine("Output      : " + outputFilePath);
+                Console.WriteLine();
+
+                ReWriteBindingRedirects(outputFilePath);
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                Console.Error.WriteLine(e);
             }
         }
 
-        static void SafeMain(string[] args)
+        /// <summary> Rewrites binding Redirects in the <paramref name="configFile"/> for all Assemblies (DLLs and EXEs) in the <paramref name="searchDirectory"/> </summary>
+        public static void ReWriteBindingRedirects(FileInfo configFile, DirectoryInfo? searchDirectory = null)
         {
-            Console.WriteLine("BindingRedirectGenerator - Copyright (C) 2019-" + DateTime.Now.Year + " Simon Mourier. All rights reserved.");
-            Console.WriteLine();
-            if (CommandLine.HelpRequested || args.Length < 2)
+            var doc = configFile.Exists ? XDocument.Load(configFile.FullName) : new XDocument();
+
+            searchDirectory ??= configFile.Directory;
+            var configuration = doc.GetOrCreateElement("configuration");
+            var runtime = configuration.GetOrCreateElement("runtime");
+            var assemblyBinding = runtime.GetOrCreateElement(XName.Get("assemblyBinding", ns));
+
+            foreach (var file in searchDirectory!.EnumerateFiles("*.*", SearchOption.AllDirectories))
             {
-                Help();
-                return;
-            }
-
-            string inputDirectoryPath = CommandLine.GetArgument<string>(0);
-            string outputFilePath = CommandLine.GetArgument<string>(1);
-            if (inputDirectoryPath == null || outputFilePath == null)
-            {
-                Help();
-                return;
-            }
-
-            inputDirectoryPath = Path.GetFullPath(inputDirectoryPath);
-            if (!Directory.Exists(inputDirectoryPath))
-            {
-                Console.WriteLine(inputDirectoryPath + " directory does not exists.");
-                return;
-            }
-
-            outputFilePath = Path.GetFullPath(outputFilePath);
-
-            Console.WriteLine("Input       : " + inputDirectoryPath);
-            Console.WriteLine("Output      : " + outputFilePath);
-            Console.WriteLine();
-
-            XDocument doc;
-            if (File.Exists(outputFilePath))
-            {
-                doc = XDocument.Load(outputFilePath);
-            }
-            else
-            {
-                doc = new XDocument();
-            }
-
-            var configuration = doc.Element("configuration");
-            if (configuration == null)
-            {
-                configuration = new XElement("configuration");
-                doc.Add(configuration);
-            }
-
-            var runtime = configuration.Element("runtime");
-            if (runtime == null)
-            {
-                runtime = new XElement("runtime");
-                configuration.Add(runtime);
-            }
-
-            var ns = "urn:schemas-microsoft-com:asm.v1";
-
-            var assemblyBinding = runtime.Element(XName.Get("assemblyBinding", ns));
-            if (assemblyBinding == null)
-            {
-                assemblyBinding = new XElement(XName.Get("assemblyBinding", ns));
-                runtime.Add(assemblyBinding);
-            }
-
-            foreach (var file in Directory.EnumerateFiles(inputDirectoryPath))
-            {
-                var ext = Path.GetExtension(file);
-                if (string.Compare(ext, ".dll", true) != 0 && string.Compare(ext, ".exe", true) != 0)
+                var ext = file.Extension;
+                if (!".dll".EqualsIgnoreCase(ext) && 
+                    !".exe".EqualsIgnoreCase(ext))
+                {
+                    Console.WriteLine("Ignoring: " + file);
                     continue;
+                }
 
                 var asm = LoadAssembly(file);
                 if (asm == null) // not .NET, not valid, etc.
@@ -113,25 +79,25 @@ namespace BindingRedirectGenerator
                 Func<XElement, bool> cultureFunc;
                 if (string.IsNullOrEmpty(asm.Name.Culture))
                 {
-                    cultureFunc = (i) => i.Attribute("culture") == null || i.Attribute("culture")?.Value == "neutral";
+                    cultureFunc = i => i.Attribute("culture") == null || i.Attribute("culture")?.Value == "neutral";
                 }
                 else
                 {
-                    cultureFunc = (i) => i.Attribute("culture")?.Value == asm.Name.Culture;
+                    cultureFunc = i => i.Attribute("culture")?.Value == asm.Name.Culture;
                 }
 
                 var dependentAssembly = assemblyBinding
-                    .Descendants(XName.Get("dependentAssembly", ns))?
-                    .Descendants(XName.Get("assemblyIdentity", ns))?
+                    .Descendants(NameDependentAssembly)
+                    .Descendants(NameAssemblyIdentity)
                     .FirstOrDefault(i => i.Attribute("name")?.Value == asm.Name.Name && i.Attribute("publicKeyToken")?.Value == pkt && cultureFunc(i))?
                     .Parent;
                 if (dependentAssembly != null)
                     continue;
 
-                dependentAssembly = new XElement(XName.Get("dependentAssembly", ns));
+                dependentAssembly = new XElement(NameDependentAssembly);
                 assemblyBinding.Add(dependentAssembly);
 
-                var assemblyIdentity = new XElement(XName.Get("assemblyIdentity", ns));
+                var assemblyIdentity = new XElement(NameAssemblyIdentity);
                 dependentAssembly.Add(assemblyIdentity);
                 assemblyIdentity.SetAttributeValue("name", asm.Name.Name);
                 assemblyIdentity.SetAttributeValue("publicKeyToken", pkt);
@@ -140,47 +106,42 @@ namespace BindingRedirectGenerator
                     assemblyIdentity.SetAttributeValue("culture", asm.Name.Culture);
                 }
 
-                var bindingRedirect = new XElement(XName.Get("bindingRedirect", ns));
+                var bindingRedirect = new XElement(NameBindingRedirect);
                 dependentAssembly.Add(bindingRedirect);
                 bindingRedirect.SetAttributeValue("oldVersion", "0.0.0.0-65535.65535.65535.65535");
                 bindingRedirect.SetAttributeValue("newVersion", asm.Name.Version.ToString());
             }
 
-            doc.Save(outputFilePath);
+            doc.Save(configFile.FullName);
         }
 
-        public static AssemblyDefinition LoadAssembly(string path)
+        /// <summary> Gets the first <see cref="XElement"/> with the <paramref name="xName"/> from the <paramref name="parent"/>
+        /// or creates and adds it to the <paramref name="parent"/> </summary>
+        /// <returns> the found or created Element. </returns>
+        public static XElement GetOrCreateElement(this XContainer parent, XName xName)
         {
-            if (path == null)
-                throw new ArgumentNullException(nameof(path));
+            var configuration = parent.Element(xName);
+            if (configuration == null)
+            {
+                configuration = new XElement(xName);
+                parent.Add(configuration);
+            }
 
+            return configuration;
+        }
+
+        public static AssemblyDefinition? LoadAssembly(this FileInfo path)
+        {
             try
             {
-                using var stream = File.OpenRead(path);
-                return AssemblyDefinition.ReadAssembly(path);
+                return AssemblyDefinition.ReadAssembly(path.FullName);
             }
-#pragma warning disable CA1031 // Do not catch general exception types
             catch (Exception e)
             {
-                Console.WriteLine("Skipping '" + path + "': " + e.Message);
+                Console.Error.WriteLine("Skipping '" + path + "': " + e.Message);
                 return null;
             }
-#pragma warning restore CA1031 // Do not catch general exception types
         }
 
-        static void Help()
-        {
-            Console.WriteLine(Assembly.GetEntryAssembly().GetName().Name.ToUpperInvariant() + " <input directory path> <output file path>");
-            Console.WriteLine();
-            Console.WriteLine("Description:");
-            Console.WriteLine("    This tool scans a directory and merges binding redirects for all assemblies found to a .config (or xml) file.");
-            Console.WriteLine();
-            Console.WriteLine("Examples:");
-            Console.WriteLine();
-            Console.WriteLine("    " + Assembly.GetEntryAssembly().GetName().Name.ToUpperInvariant() + " c:\\mypath\\myproject myproject.exe.config ");
-            Console.WriteLine();
-            Console.WriteLine("    Scans the c:\\mypath\\myproject directory for assemblies and merges binding redirects to to the myproject.exe.config file.");
-            Console.WriteLine();
-        }
     }
 }
