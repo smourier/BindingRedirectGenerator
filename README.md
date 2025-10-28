@@ -5,6 +5,8 @@ A tool to generate binding redirects from assemblies in a given path.
 - add Redirects for all other DLLs and EXEs 
 
 ## Command Line Parameters: 
-1st Parameter: Path to the app.config/web.config 
-2nd Parameter: optional, Path to the bin Directory (fallback to the app.config Directory and subdirectories) 
+1. Parameter: Path to the app.config/web.config 
+2. Parameter: optional, Path to the bin Directory (fallback to the app.config Directory and subdirectories) 
+
+This allows to associate the *.config Extension with this Generator and generate the redirects by double-clicking the Configs. 
 
