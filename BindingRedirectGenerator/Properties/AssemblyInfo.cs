@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyDescription("Binding Redirect Generator")]
 [assembly: AssemblyCompany("Simon Mourier")]
 [assembly: AssemblyProduct("Binding Redirect Generator")]
-[assembly: AssemblyCopyright("Copyright (C) 2019-2025 Simon Mourier. All rights reserved.")]
+[assembly: AssemblyCopyright("Copyright (C) 2019-2026 Simon Mourier. All rights reserved.")]
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("7a611313-a2ee-4e03-9fa7-21b17573aa38")]
